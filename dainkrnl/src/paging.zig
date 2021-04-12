@@ -24,6 +24,7 @@ pub const MapFlags = enum {
 };
 
 pub const mapPage = arch_paging.mapPage;
+pub const flushTLB = arch_paging.flushTLB;
 
 pub var bump = BumpAllocator{ .next = 0 };
 
@@ -41,7 +42,30 @@ pub fn mapPagesConsecutive(base_in: usize, page_count_in: usize, flags: MapFlags
         }
         last = next;
     }
-    arch_paging.flushTLB();
+    flushTLB();
+    return first;
+}
+
+pub fn kallocPage(flags: MapFlags) Error![]u8 {
+    const phys = bump.allocPage();
+    const virt = mapPage(phys, flags);
+    return @intToPtr([*]u8, virt)[0..PAGING.page_size];
+}
+
+pub fn kallocConsecutivePages(page_count_in: usize, flags: MapFlags) Error!usize {
+    var page_count = page_count_in - 1;
+
+    var first = try kallocPage(flags);
+    var last = first;
+    while (page_count > 0) : (page_count -= 1) {
+        base += PAGING.page_size;
+        var next = try kallocPage(flags);
+        if (next - last != PAGING.page_size) {
+            @panic("kallocConsecutivePages wasn't consecutive");
+        }
+        last = next;
+    }
+    flushTLB();
     return first;
 }
 
